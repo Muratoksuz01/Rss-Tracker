@@ -1,0 +1,3 @@
+.venv/
+scrapers/IlanGovScraper.py
+scrapers/SaglikBakanligiScraper.py
