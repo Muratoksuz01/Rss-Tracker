@@ -17,6 +17,7 @@ class Feed:
     url: str
     pub_date: datetime
     image: str | None = None
+    location:str | None = None
 
 
 

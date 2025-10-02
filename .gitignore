@@ -1,3 +1,7 @@
 .venv/
 scrapers/IlanGovScraper.py
 scrapers/SaglikBakanligiScraper.py
+scrapers/KariyerNetScraper.py
+# Python cache
+__pycache__/
+*.pyc

@@ -2,12 +2,14 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 import os
 from google.cloud import firestore
-
+# from plyer import notification
+from models.models import Feed, RssSource
 import requests
-
-from models.models import Feed
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+
+env_path = Path(__file__).resolve().parent.parent / "config" / ".env"
+load_dotenv(dotenv_path=env_path)
 
 class FeedScraper(ABC):
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -41,6 +43,8 @@ class FeedScraper(ABC):
             f"📰 Kaynak: {feed.source.name}\n"
             f"🔗 {feed.url}\n"
             f"➕ {feed.content}"
+            f"{'📍 ' + feed.location if feed.location else ''}"
+
         )
         try:
             r = requests.post(
@@ -49,6 +53,14 @@ class FeedScraper(ABC):
             )
             r.raise_for_status()
             print(f"Telegram bildirimi gitti → {feed.source.name}")
+            
+            """ if len(feed) > 0 and False: # true yaparsan windows bildirmi alırsın 
+                notification.notify(
+                    title="RSS Takip Botu",
+                    message=f" {feed.source.name}'de {len(feed)} adet yeni içerik bulundu!",
+                    app_name="RSS Tracker",
+                    timeout=10
+                ) """
         except Exception as e:
             print("Telegram hatası:", e)
 
@@ -111,6 +123,7 @@ class FeedScraper(ABC):
                     "feed_url": feed.url,
                     "pub_date": feed.pub_date.isoformat(),
                     "image": feed.image or None ,
+                    "location":feed.location or None
                     # "created_at": datetime.utcnow().isoformat()
                 })
                 print(f"[YENİ İÇERİK] {feed.url}")
@@ -118,3 +131,45 @@ class FeedScraper(ABC):
 
         except Exception as e:
             print("Kayıt hatası:", e)
+
+
+    def deleteRssSource(self, source: RssSource):
+        """
+        Verilen source name'e göre Firestore'dan RSS kaynağını ve
+        ona bağlı tüm içerikleri siler.
+        """
+        try:
+            # Önce kaynağı bul
+            src_query = (
+                self.db.collection("rss_sources")
+                .where("name", "==", source.name)
+                .limit(1)
+                .get()
+            )
+
+            if not src_query:
+                print(f"[BİLGİ] '{source.name}' adında bir kaynak bulunamadı.")
+                return
+
+            source_doc = src_query[0]
+            source_id = source_doc.id
+
+            # Kaynağa bağlı içerikleri sil
+            contents_query = (
+                self.db.collection("rss_contents")
+                .where("source_id", "==", source_id)
+                .stream()
+            )
+
+            deleted_count = 0
+            for content in contents_query:
+                self.db.collection("rss_contents").document(content.id).delete()
+                deleted_count += 1
+
+            # Kaynağı sil
+            self.db.collection("rss_sources").document(source_id).delete()
+
+            print(f"[OK] '{source.name}' kaynağı ve {deleted_count} içerik silindi.")
+
+        except Exception as e:
+            print(f"[HATA] '{source.name}' kaynağı silinirken hata: {e}")
